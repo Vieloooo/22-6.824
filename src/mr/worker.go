@@ -18,7 +18,7 @@ type KeyValue struct {
 }
 
 var NMAP int = 0
-var NREDUCE int = 0 
+var NREDUCE int = 0
 
 func (job *MapJob) DoJob(mapf func(string, string) []KeyValue) bool {
 	//clean up the old job files
@@ -41,17 +41,17 @@ func (job *MapJob) DoJob(mapf func(string, string) []KeyValue) bool {
 	}
 	inputFile.Close()
 	kva := mapf(job.FileName, string(content))
-	// split the kva into NReduce buckets, NReduce kv pairs, and write them to the NReduce intermediate files in JSON format 
-	//make NReduce kv encoder for NReduce intermediate files 
+	// split the kva into NReduce buckets, NReduce kv pairs, and write them to the NReduce intermediate files in JSON format
+	//make NReduce kv encoder for NReduce intermediate files
 	encs := make([]json.Encoder, NREDUCE)
-	for i:=0; i < NREDUCE; i++{
+	for i := 0; i < NREDUCE; i++ {
 		encs[i] = json.NewEncoder(ofiles[i])
 	}
 	for _, kv := range kva {
 		// use ihash(key) % NRedue to select bucket
 		bucket := ihash(kv.Key) % NREDUCE
 		// write the kv pair to the bucket file
-		if err:= encs[bucket].Encode(&kv); err != nil{
+		if err := encs[bucket].Encode(&kv); err != nil {
 			log.Fatalf("cannot write %v", kv)
 		}
 	}
@@ -76,14 +76,24 @@ func (job *ReduceJob) DoJob(reducef func(string, []string) string) bool {
 		if err != nil {
 			log.Fatalf("cannot open %v", fileName)
 		}
-		content, err := ioutil.ReadAll(inputFile)
-		if err != nil {
-			log.Fatalf("cannot read %v", fileName)
+		dec := json.NewDecoder(inputFile)
+		for {
+			var kv KeyValue
+			if err := dec.Decode(&kv); err != nil {
+				break
+			}
+			kva[kv.Key] = append(kva[kv.Key], kv.Value)
 		}
 		inputFile.Close()
-		// split the content into kv pairs
 
-
+	}
+	//Now kva is a map which k = words in all txt files, v = N repeated "1" string array (N is the number of times that the word appears in all txt files)
+	//call reducef, and write the result to the output file
+	for k, v := range kva {
+		output := reducef(k, v)
+		fmt.Fprintf(ofile, "%v %v\n", k, output)
+	}
+	ofile.Close()
 	return true
 }
 
@@ -155,7 +165,6 @@ func Worker(mapf func(string, string) []KeyValue,
 			continue
 		}
 
-	
 	}
 
 }
