@@ -22,6 +22,10 @@ func (a ByKey) Len() int           { return len(a) }
 func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
+// Sequential word count flow:
+// 1. read input files, call map function, which seperate all words to (w, 1) pairs, saving in intermediate
+// 2. sort intermediate by key
+// 3. group all (w, 1) pairs by w, and call reduce function, which return the count of w, saving in output file
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Fprintf(os.Stderr, "Usage: mrsequential xxx.so inputfiles...\n")
@@ -47,6 +51,7 @@ func main() {
 		}
 		file.Close()
 		kva := mapf(filename, string(content))
+		//the intermediate is a kv pair, where k = words, v = 1
 		intermediate = append(intermediate, kva...)
 	}
 
@@ -68,6 +73,7 @@ func main() {
 	i := 0
 	for i < len(intermediate) {
 		j := i + 1
+		//This step read intermediate (w, 1), and group them by w, and then call reducef(w, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]) to get the result.
 		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
 			j++
 		}
@@ -86,10 +92,8 @@ func main() {
 	ofile.Close()
 }
 
-//
 // load the application Map and Reduce functions
 // from a plugin file, e.g. ../mrapps/wc.so
-//
 func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
 	p, err := plugin.Open(filename)
 	if err != nil {

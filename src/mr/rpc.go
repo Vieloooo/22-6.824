@@ -22,8 +22,31 @@ type ExampleReply struct {
 	Y int
 }
 
+const JobTypeMap = "MAP"
+const JobTypeReduce = "REDUCE"
+const JobTypeNoJob = "NOJOB"
+
 // Add your RPC definitions here.
 
+type MapJob struct {
+	MapJobID int
+	FileName string
+}
+
+type ReduceJob struct {
+	ReduceJobID int
+}
+type GetJobReply struct {
+	JobType        string
+	TotalMapJob    int
+	TotalReduceJob int
+	AMapJob        MapJob
+	AReduceJob     ReduceJob
+}
+type GetJobArg struct {
+	JobType string
+	JobID   int
+}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.

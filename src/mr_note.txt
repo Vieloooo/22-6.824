@@ -1,0 +1,8 @@
+# sequential workflow: 
+
+1. read input files, call map function, which seperate all words to (w, 1) pairs, saving in intermediate
+2. sort intermediate by key
+3. group all (w, 1) pairs by w, and call reduce function, which return the count of w, saving in output file
+
+# Mapreduce wordcount in a single machine 
+
