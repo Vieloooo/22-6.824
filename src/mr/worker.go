@@ -17,6 +17,7 @@ type KeyValue struct {
 	Value string
 }
 
+// NMap equals to the total number of input files (pg-*.txt)
 var NMAP int = 0
 var NREDUCE int = 0
 
@@ -24,11 +25,16 @@ func (job *MapJob) DoJob(mapf func(string, string) []KeyValue) bool {
 	//clean up the old job files
 	//delete all files named in format of mr-<MapJob.JobID>-* (Regex), where * means the number in [0, NREDUCE)
 	//then create NReduce bucket intermediate files
+	//log.Printf("MapJob %d start, spliting file: %v\n", job.MapJobID, job.FileName)
 	ofiles := make([]*os.File, NREDUCE)
 	for i := 0; i < NREDUCE; i++ {
-		fileName := fmt.Sprintf("mr-%d-%d", job.MapJobID, i)
-		os.Remove(fileName)
-		ofiles[i], _ = os.Create(fileName)
+
+		//ofiles[i], _ = os.Create(fileName)
+		var err error
+		ofiles[i], err = ioutil.TempFile("", "mr_map_*")
+		if err != nil {
+			log.Fatalf("cannot create tmep file %v", err)
+		}
 	}
 	// call mapf, generate a big kva map for the input txt file
 	inputFile, err := os.Open(job.FileName)
@@ -43,7 +49,7 @@ func (job *MapJob) DoJob(mapf func(string, string) []KeyValue) bool {
 	kva := mapf(job.FileName, string(content))
 	// split the kva into NReduce buckets, NReduce kv pairs, and write them to the NReduce intermediate files in JSON format
 	//make NReduce kv encoder for NReduce intermediate files
-	encs := make([]json.Encoder, NREDUCE)
+	encs := make([]*json.Encoder, NREDUCE)
 	for i := 0; i < NREDUCE; i++ {
 		encs[i] = json.NewEncoder(ofiles[i])
 	}
@@ -52,20 +58,22 @@ func (job *MapJob) DoJob(mapf func(string, string) []KeyValue) bool {
 		bucket := ihash(kv.Key) % NREDUCE
 		// write the kv pair to the bucket file
 		if err := encs[bucket].Encode(&kv); err != nil {
-			log.Fatalf("cannot write %v", kv)
+			log.Fatalf("cannot write %v in bucket %v, which file name is: %v", kv, bucket, ofiles[bucket].Name())
 		}
 	}
 	//write all kvs in the ofiles, then close all ofiles
 	for i := 0; i < NREDUCE; i++ {
+		//rename tmp to mr-<MapJob.JobID>-<ReduceJob.JobID>
+		fileName := fmt.Sprintf("mr-%d-%d", job.MapJobID, i)
+		os.Remove(fileName)
+		os.Rename(ofiles[i].Name(), fileName)
 		ofiles[i].Close()
 	}
 	return true
 }
 func (job *ReduceJob) DoJob(reducef func(string, []string) string) bool {
 	//clean up the old output files, mr-out-<ReduceJob.JobID>, and create a new one
-	outputFileName := fmt.Sprintf("mr-out-%d", job.ReduceJobID)
-	os.Remove(outputFileName)
-	ofile, _ := os.Create(outputFileName)
+	ofile, _ := ioutil.TempFile("", "mr_reduce_*")
 	// read all the intermediate files, and group them by key
 	// the intermediate file name is mr-<MapJob.JobID>-<ReduceJob.JobID>, just read mr-*-<ReduceJob.JobID>
 	// the intermediate file format is <key> <value>, merge all intermediate files into a big kva map, and group them by key
@@ -93,6 +101,9 @@ func (job *ReduceJob) DoJob(reducef func(string, []string) string) bool {
 		output := reducef(k, v)
 		fmt.Fprintf(ofile, "%v %v\n", k, output)
 	}
+	outputFileName := fmt.Sprintf("mr-out-%d", job.ReduceJobID)
+	os.Remove(outputFileName)
+	os.Rename(ofile.Name(), outputFileName)
 	ofile.Close()
 	return true
 }
@@ -152,11 +163,14 @@ func Worker(mapf func(string, string) []KeyValue,
 					oldJob.JobID = newJob.AReduceJob.ReduceJobID
 					oldJob.JobType = newJob.JobType
 				}
+			} else if newJob.JobType == JobTypeAllDone {
+				//all job done, exit the program
+				return
 			}
 		} else {
 			// if coordinator donot respond to the request twice, exit the program
 			CoordinatorDisconnectCnt++
-			if CoordinatorDisconnectCnt > 1 {
+			if CoordinatorDisconnectCnt > 2 {
 				log.Fatal("Coordinator fail")
 				return
 			}

@@ -25,6 +25,7 @@ type ExampleReply struct {
 const JobTypeMap = "MAP"
 const JobTypeReduce = "REDUCE"
 const JobTypeNoJob = "NOJOB"
+const JobTypeAllDone = "ALLDONE"
 
 // Add your RPC definitions here.
 
